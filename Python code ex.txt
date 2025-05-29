@@ -1,0 +1,146 @@
+# ------------------- app.py -------------------
+from flask import Flask, Blueprint, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+
+# ------------------- Configuration -------------------
+class Config:
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://user:password@localhost/hydropulseai'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+# ------------------- Database Initialization -------------------
+db = SQLAlchemy()
+
+def init_db(app):
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+
+# ------------------- Models -------------------
+class Owner(db.Model):
+    __tablename__ = 'owners'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))
+    phone = db.Column(db.String(20))
+    email = db.Column(db.String(100))
+    device_ip = db.Column(db.String(50))
+    location = db.Column(db.String(100))
+
+class Event(db.Model):
+    __tablename__ = 'events'
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('owners.id'))
+    event_type = db.Column(db.String(50))
+    status = db.Column(db.String(20))
+    data_payload = db.Column(db.JSON)
+    timestamp = db.Column(db.DateTime)
+
+# ------------------- Alert Handlers -------------------
+def send_sms(phone, message):
+    print(f"Sending SMS to {phone}: {message}")
+
+def send_email(email, subject, body):
+    print(f"Sending Email to {email} - Subject: {subject}")
+
+def trigger_iot(ip):
+    print(f"Triggering IoT action on device with IP: {ip}")
+
+def handle_alert(data, severity):
+    if severity == 'Yellow':
+        send_sms(data['phone'], "[YELLOW] Alert detected.")
+        send_email(data['email'], "[YELLOW] Alert Notification", "Please check the system.")
+    elif severity == 'Orange':
+        send_sms(data['phone'], "[ORANGE] Critical usage - missed call alert")
+    elif severity == 'Red':
+        trigger_iot(data['device_ip'])
+
+# ------------------- Helper Functions for Severity Classification -------------------
+def classify_severity(value):
+    if value < 50:
+        return 'Yellow'
+    elif value < 80:
+        return 'Orange'
+    else:
+        return 'Red'
+
+def classify_usage(value):
+    if value < 70:
+        return 'Yellow'
+    elif value < 90:
+        return 'Orange'
+    else:
+        return 'Red'
+
+def classify_quality(ph):
+    if 6.5 <= ph <= 8.5:
+        return 'Yellow'
+    elif 5.5 <= ph <= 6.4 or 8.6 <= ph <= 9.5:
+        return 'Orange'
+    else:
+        return 'Red'
+
+# ------------------- API Blueprints -------------------
+leak_api = Blueprint('leak_api', __name__)
+usage_api = Blueprint('usage_api', __name__)
+quality_api = Blueprint('quality_api', __name__)
+
+@leak_api.route('/leak', methods=['POST'])
+def leak():
+    data = request.json
+    severity = classify_severity(data['value'])
+    event = Event(
+        owner_id=data['owner_id'],
+        event_type='leak',
+        status=severity,
+        data_payload=data,
+        timestamp=datetime.now()
+    )
+    db.session.add(event)
+    db.session.commit()
+    handle_alert(data, severity)
+    return jsonify({'message': 'Leak processed', 'severity': severity})
+
+@usage_api.route('/usage', methods=['POST'])
+def usage():
+    data = request.json
+    severity = classify_usage(data['value'])
+    event = Event(
+        owner_id=data['owner_id'],
+        event_type='usage',
+        status=severity,
+        data_payload=data,
+        timestamp=datetime.now()
+    )
+    db.session.add(event)
+    db.session.commit()
+    handle_alert(data, severity)
+    return jsonify({'message': 'Usage processed', 'severity': severity})
+
+@quality_api.route('/quality', methods=['POST'])
+def quality():
+    data = request.json
+    severity = classify_quality(data['ph'])  # assuming you're monitoring pH
+    event = Event(
+        owner_id=data['owner_id'],
+        event_type='quality',
+        status=severity,
+        data_payload=data,
+        timestamp=datetime.now()
+    )
+    db.session.add(event)
+    db.session.commit()
+    handle_alert(data, severity)
+    return jsonify({'message': 'Quality processed', 'severity': severity})
+
+# ------------------- Main Application -------------------
+app = Flask(__name__)
+app.config.from_object(Config)
+
+init_db(app)
+
+app.register_blueprint(leak_api, url_prefix='/api')
+app.register_blueprint(usage_api, url_prefix='/api')
+app.register_blueprint(quality_api, url_prefix='/api')
+
+if __name__ == '__main__':
+    app.run(debug=True)

@@ -1,0 +1,34 @@
+-- Create the 'owners' table
+CREATE TABLE owners (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    device_ip VARCHAR(50),
+    location VARCHAR(100)
+);
+
+-- Create the 'events' table
+CREATE TABLE events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    owner_id INT NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    data_payload JSON,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES owners(id)
+);
+
+
+
+
+Explanation:
+- owners Table:- Stores information about the owner, including their name, phone number, email, device IP, and location.
+- Uses id as the primary key.
+
+- events Table:- Logs events (leaks, usage, or quality data) with details such as the event type, status, and a JSON payload (data_payload).
+- Includes a timestamp column to track when the event occurred.
+- The owner_id column establishes a foreign key relationship with the owners table, ensuring events are associated with an owner.
+
+
+
